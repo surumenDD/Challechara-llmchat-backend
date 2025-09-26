@@ -113,11 +113,22 @@ class GeminiChatService:
                             selected_files = parts[2].split(",") if len(
                                 parts) > 2 and parts[2] else None
 
+                            logger.info(f"Attempting to read material files for: {book_id}")
+                            logger.info(f"Selected files: {selected_files}")
+
                             # ファイル内容を読み取り
                             files_content = self.file_service.read_material_files_content(
                                 book_id, selected_files
                             )
                             if files_content:
+                                file_context += self.file_service.format_files_for_context(
+                                    files_content)
+                                logger.info(
+                                    f"Material files loaded: {list(files_content.keys())}")
+                            else:
+                                logger.warning(f"No files found for material: {book_id}")
+                                if selected_files:
+                                    files_not_found.extend(selected_files)
                                 file_context += self.file_service.format_files_for_context(
                                     files_content)
                                 logger.info(
@@ -169,7 +180,7 @@ class GeminiChatService:
             # Gemini API設定とタイムアウト対策
             generation_config = genai.types.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=1000,  # 出力トークン数を制限
+                max_output_tokens=2000,  # 出力トークン数を増やす
             )
 
             response = self.model.generate_content(
@@ -180,9 +191,11 @@ class GeminiChatService:
 
             # レスポンスの検証
             response_text = ""
+            
             if response.candidates:
                 # 候補がある場合、最初の候補からテキストを取得
                 candidate = response.candidates[0]
+                
                 if candidate.content and candidate.content.parts:
                     # 全てのパートからテキストを抽出
                     text_parts = []
@@ -190,7 +203,23 @@ class GeminiChatService:
                         if hasattr(part, 'text') and part.text:
                             text_parts.append(part.text)
                     response_text = "".join(text_parts)
-                else:
+                    
+                    # MAX_TOKENSで切り捨てられた場合のログ
+                    if candidate.finish_reason == 2:  # MAX_TOKENS
+                        logger.warning("Response was truncated due to max_tokens limit")
+                elif candidate.finish_reason == 2:
+                    # finish_reasonがMAX_TOKENSの場合、部分的でもcontentがあれば取得を試行
+                    try:
+                        if candidate.content and hasattr(candidate.content, 'parts'):
+                            text_parts = []
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'text'):
+                                    text_parts.append(str(part.text) if part.text else "")
+                            response_text = "".join(text_parts)
+                    except Exception as extract_error:
+                        logger.error(f"Error extracting partial response: {extract_error}")
+                        
+                if not response_text.strip():
                     logger.warning("Response candidate has no content or parts")
                     response_text = "申し訳ございません。AIからの応答が空でした。"
             else:

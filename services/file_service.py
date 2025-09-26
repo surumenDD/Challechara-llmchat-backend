@@ -261,6 +261,84 @@ class FileService:
         
         formatted_content.append("=== 参照ファイル終了 ===\n")
         return "\n".join(formatted_content)
+    
+    # 資料管理メソッド
+    def save_material_file(self, book_id: str, filename: str, content: str) -> Path:
+        """資料ファイルを保存"""
+        material_path = self.materials_dir / book_id
+        material_path.mkdir(parents=True, exist_ok=True)
+        
+        # 重複ファイル名の処理
+        base_name = Path(filename).stem
+        extension = Path(filename).suffix or '.txt'
+        final_filename = filename
+        counter = 1
+        
+        while (material_path / final_filename).exists():
+            final_filename = f"{base_name}({counter}){extension}"
+            counter += 1
+        
+        file_path = material_path / final_filename
+        
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            logger.info(f"Material file saved: {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(f"Error saving material file {file_path}: {e}")
+            raise
+    
+    def list_material_files(self, book_id: str) -> List[str]:
+        """資料ファイル一覧を取得"""
+        material_path = self.materials_dir / book_id
+        files = []
+        
+        if not material_path.exists():
+            return files
+        
+        try:
+            for file_path in material_path.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in self.supported_extensions:
+                    relative_path = str(file_path.relative_to(material_path))
+                    files.append(relative_path)
+        except Exception as e:
+            logger.error(f"Error listing material files: {e}")
+        
+        return sorted(files)
+    
+    def read_material_file_content(self, book_id: str, filename: str) -> Optional[str]:
+        """資料ファイルの内容を読み取り"""
+        material_path = self.materials_dir / book_id / filename
+        
+        if not material_path.exists():
+            logger.warning(f"Material file does not exist: {material_path}")
+            return None
+        
+        return self._read_text_file(material_path)
+    
+    def delete_material_file(self, book_id: str, filename: str) -> bool:
+        """資料ファイルを削除"""
+        material_path = self.materials_dir / book_id / filename
+        
+        if not material_path.exists():
+            logger.warning(f"Material file does not exist: {material_path}")
+            return False
+        
+        try:
+            material_path.unlink()
+            logger.info(f"Material file deleted: {material_path}")
+            
+            # 空のディレクトリを削除
+            parent_dir = material_path.parent
+            if parent_dir.exists() and not any(parent_dir.iterdir()):
+                parent_dir.rmdir()
+                logger.info(f"Empty material directory removed: {parent_dir}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting material file {material_path}: {e}")
+            return False
 
 
 # シングルトンインスタンス
