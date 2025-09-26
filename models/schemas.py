@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal
 from datetime import datetime
 
+
 class ChatMessage(BaseModel):
     """チャットメッセージのモデル"""
     id: str
@@ -9,17 +10,20 @@ class ChatMessage(BaseModel):
     content: str
     ts: int
 
+
 class ChatRequest(BaseModel):
     """チャットリクエストのモデル"""
     messages: List[ChatMessage]
     sources: Optional[List[str]] = []
     context: Optional[str] = None
 
+
 class ChatResponse(BaseModel):
     """チャットレスポンスのモデル"""
     message: ChatMessage
     success: bool
     error: Optional[str] = None
+
 
 class ProjectFile(BaseModel):
     """プロジェクトファイルのモデル"""
@@ -29,6 +33,7 @@ class ProjectFile(BaseModel):
     created_at: int
     updated_at: int
 
+
 class Material(BaseModel):
     """資料のモデル"""
     id: str
@@ -37,6 +42,7 @@ class Material(BaseModel):
     file_type: Optional[str] = None
     size: Optional[int] = None
     created_at: int
+
 
 class DictionaryEntry(BaseModel):
     """辞書エントリのモデル"""
@@ -48,10 +54,12 @@ class DictionaryEntry(BaseModel):
     examples: List[str]
     synonyms: List[str]
 
+
 class DictionarySearchRequest(BaseModel):
     """辞書検索リクエストのモデル"""
     query: str
     limit: Optional[int] = 10
+
 
 class DictionarySearchResponse(BaseModel):
     """辞書検索レスポンスのモデル"""
@@ -59,12 +67,14 @@ class DictionarySearchResponse(BaseModel):
     total: int
     query: str
 
+
 class MaterialUploadRequest(BaseModel):
     """資料アップロードリクエストのモデル"""
     book_id: str
     title: str
     content: str
     file_type: Optional[str] = None
+
 
 class ErrorResponse(BaseModel):
     """エラーレスポンスのモデル"""
