@@ -5,8 +5,9 @@ import json
 import time
 from pathlib import Path
 
-from models.schemas import Material, MaterialUploadRequest, ChatRequest, ChatMessage
+from models.schemas import Material, MaterialUploadRequest, ChatRequest, ChatMessage, ChatResponse
 from services.gemini_service import get_gemini_service
+from services.file_service import get_file_service
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +16,6 @@ router = APIRouter()
 # 資料保存用のディレクトリ
 MATERIALS_DIR = Path("./data/materials")
 MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
-
-# インメモリ資料ストレージ（本番環境ではデータベースを使用）
-materials_storage: Dict[str, List[Material]] = {}
 
 @router.post("/materials/upload")
 async def upload_material(
@@ -28,6 +26,7 @@ async def upload_material(
     """資料ファイルのアップロード"""
     try:
         logger.info(f"Uploading material for book {book_id}: {title}")
+        file_service = get_file_service()
         
         # ファイル内容を読み取り
         content = await file.read()
@@ -45,27 +44,25 @@ async def upload_material(
             # バイナリファイルの場合、ファイル名のみ保存（実際の実装では適切な処理が必要）
             text_content = f"[Binary file: {file.filename}]"
         
+        # ファイル名からタイトルを決定（重複があれば自動調整）
+        filename = file.filename or title
+        if not filename.endswith('.txt'):
+            filename += '.txt'
+            
+        # 資料ディレクトリに保存
+        saved_path = file_service.save_material_file(book_id, filename, text_content)
+        
         # 資料オブジェクトを作成
         material = Material(
             id=f"material-{int(time.time())}-{abs(hash(title)) % 10000}",
-            title=title,
+            title=filename,
             content=text_content,
-            file_type=file.content_type,
+            file_type=file.content_type or 'text/plain',
             size=len(content),
             created_at=int(time.time() * 1000)
         )
         
-        # ストレージに保存
-        if book_id not in materials_storage:
-            materials_storage[book_id] = []
-        materials_storage[book_id].append(material)
-        
-        # ファイルをディスクに保存（オプション）
-        file_path = MATERIALS_DIR / f"{material.id}_{file.filename}"
-        with open(file_path, "wb") as f:
-            f.write(content)
-        
-        logger.info(f"Material uploaded successfully: {material.id}")
+        logger.info(f"Material uploaded successfully to: {saved_path}")
         
         return {
             "success": True,
@@ -89,10 +86,28 @@ async def get_materials(book_id: str) -> List[Material]:
     """指定されたブックの資料一覧を取得"""
     try:
         logger.info(f"Getting materials for book: {book_id}")
+        file_service = get_file_service()
         
-        materials = materials_storage.get(book_id, [])
+        # ファイルシステムから資料一覧を取得
+        material_files = file_service.list_material_files(book_id)
+        
+        materials = []
+        for filename in material_files:
+            try:
+                content = file_service.read_material_file_content(book_id, filename)
+                material = Material(
+                    id=f"material-{abs(hash(filename)) % 100000}",
+                    title=filename,
+                    content=content or "",
+                    file_type="text/plain",
+                    size=len(content) if content else 0,
+                    created_at=int(time.time() * 1000)
+                )
+                materials.append(material)
+            except Exception as file_error:
+                logger.warning(f"Error reading material file {filename}: {file_error}")
+        
         logger.info(f"Found {len(materials)} materials for book {book_id}")
-        
         return materials
         
     except Exception as e:
@@ -111,35 +126,27 @@ async def delete_material(book_id: str, material_id: str):
     """資料を削除"""
     try:
         logger.info(f"Deleting material {material_id} from book {book_id}")
+        file_service = get_file_service()
         
-        if book_id not in materials_storage:
-            raise HTTPException(
-                status_code=404,
-                detail="指定されたブックに資料が見つかりません"
-            )
+        # material_idからファイル名を特定（簡易的な実装）
+        material_files = file_service.list_material_files(book_id)
+        filename_to_delete = None
         
-        materials = materials_storage[book_id]
-        original_count = len(materials)
+        for filename in material_files:
+            # material_idとファイル名のハッシュを照合
+            file_id = f"material-{abs(hash(filename)) % 100000}"
+            if file_id == material_id:
+                filename_to_delete = filename
+                break
         
-        # 資料を削除
-        materials_storage[book_id] = [
-            m for m in materials if m.id != material_id
-        ]
-        
-        if len(materials_storage[book_id]) == original_count:
+        if not filename_to_delete:
             raise HTTPException(
                 status_code=404,
                 detail="指定された資料が見つかりません"
             )
         
-        # ファイルも削除（ファイルが存在する場合）
-        try:
-            for material in materials:
-                if material.id == material_id:
-                    # 実際のファイル削除はここで行う（実装は省略）
-                    break
-        except Exception as e:
-            logger.warning(f"Could not delete physical file: {e}")
+        # ファイルを削除
+        file_service.delete_material_file(book_id, filename_to_delete)
         
         logger.info(f"Material {material_id} deleted successfully")
         
@@ -169,6 +176,7 @@ async def bulk_upload_materials(
     """複数資料の一括アップロード"""
     try:
         logger.info(f"Bulk uploading {len(files)} materials for book {book_id}")
+        file_service = get_file_service()
         
         uploaded_materials = []
         errors = []
@@ -186,18 +194,21 @@ async def bulk_upload_materials(
                 else:
                     text_content = f"[Binary file: {file.filename}]"
                 
+                filename = file.filename or "Unnamed file"
+                if not filename.endswith('.txt'):
+                    filename += '.txt'
+                
+                # ファイルを保存
+                saved_path = file_service.save_material_file(book_id, filename, text_content)
+                
                 material = Material(
-                    id=f"material-{int(time.time())}-{abs(hash(file.filename or 'unnamed')) % 10000}",
-                    title=file.filename or "Unnamed file",
+                    id=f"material-{int(time.time())}-{abs(hash(filename)) % 10000}",
+                    title=filename,
                     content=text_content,
-                    file_type=file.content_type,
+                    file_type=file.content_type or 'text/plain',
                     size=len(content),
                     created_at=int(time.time() * 1000)
                 )
-                
-                if book_id not in materials_storage:
-                    materials_storage[book_id] = []
-                materials_storage[book_id].append(material)
                 
                 uploaded_materials.append(material)
                 
@@ -221,33 +232,6 @@ async def bulk_upload_materials(
             detail={
                 "error": "bulk_upload_error",
                 "message": "一括アップロードでエラーが発生しました",
-                "details": str(e)
-            }
-        )
-
-@router.post("/chat/materials")
-async def materials_chat(request: ChatRequest) -> Dict[str, Any]:
-    """資料・マテリアル関連チャット"""
-    try:
-        logger.info(f"Materials chat request with {len(request.messages)} messages")
-        logger.info(f"Sources: {request.sources}")
-        
-        # Geminiサービスを使用してレスポンスを生成
-        gemini_service = get_gemini_service()
-        response_message = await gemini_service.generate_response(
-            request=request,
-            chat_type="material"
-        )
-        
-        return {"message": response_message}
-        
-    except Exception as e:
-        logger.error(f"Error in materials chat: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "materials_chat_error", 
-                "message": "資料チャットでエラーが発生しました",
                 "details": str(e)
             }
         )
