@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     sources: Optional[List[str]] = []
     context: Optional[str] = None
+    material_ids: Optional[List[int]] = []
 
 
 class ChatResponse(BaseModel):

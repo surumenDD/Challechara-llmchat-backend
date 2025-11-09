@@ -102,7 +102,7 @@ class GeminiChatService:
                                 if selected_files:
                                     files_not_found.extend(selected_files)
 
-            elif chat_type == "material" and request.sources:
+            elif chat_type == "material" and request.material_ids:
                 # 資料ファイルを読み取る
                 for source in request.sources:
                     # sourceが "material:book_id:file1,file2" の形式であることを想定
