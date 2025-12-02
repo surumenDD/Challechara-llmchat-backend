@@ -4,14 +4,15 @@
 
 ## 概要
 
-このバックエンドは、Gemini APIを使用したチャット機能を提供する FastAPI アプリケーションです。
+このバックエンドは、Gemini APIを使用したチャット機能を提供する FastAPI
+アプリケーションです。
 
 ## 機能
 
 - **プロジェクトチャット**: プロジェクトファイルを参照したAIチャット
 - **辞書・表現検索**: 単語・表現の検索とチャット
-- **資料チャット**: アップロードされた資料を参照したAIチャット
-- **資料管理**: ファイルのアップロード・削除機能
+- **資料チャット**: GoバックエンドのエピソードデータをGoAPIから取得してLLMに質問
+- **資料管理**: GoバックエンドAPI経由でエピソードを管理
 
 ## セットアップ
 
@@ -60,6 +61,7 @@ GEMINI_API_KEY=your_actual_gemini_api_key_here
 DEBUG=True
 PORT=8000
 FRONTEND_URL=http://localhost:3000
+GO_API_URL=http://localhost:8080  # GoバックエンドのURL
 ```
 
 ### 3. Gemini API キーの取得
@@ -69,6 +71,21 @@ FRONTEND_URL=http://localhost:3000
 3. `.env` ファイルの `GEMINI_API_KEY` に設定
 
 ### 4. サーバーの起動
+
+#### Docker Composeで起動（推奨）
+
+```bash
+# Dockerコンテナをビルド＆起動
+docker compose up -d
+
+# ログを確認
+docker compose logs -f app
+
+# 停止
+docker compose down
+```
+
+#### ローカル環境で起動
 
 ```bash
 python main.py
@@ -85,19 +102,41 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ### チャット機能
 
 - `POST /api/chat/project` - プロジェクトファイル参照チャット
-- `POST /api/chat/dictionary` - 辞書・表現検索チャット  
-- `POST /api/chat/material` - 資料参照チャット
+- `POST /api/chat/dictionary` - 辞書・表現検索チャット
+- `POST /api/chat/material` - GoAPIからエピソードを取得してLLMに質問
+
+**資料チャットの使い方:**
+
+```json
+{
+  "messages": [
+    {
+      "id": "1",
+      "role": "user",
+      "content": "このエピソードについて教えて",
+      "ts": 1638360000000
+    }
+  ],
+  "sources": ["book:123"] // book_idを指定
+}
+```
 
 ### 辞書機能
 
 - `GET /api/dictionary/search?query={word}` - 辞書検索
 - `GET /api/dictionary/suggest?context={context}` - 表現提案
 
-### 資料管理
+## アーキテクチャ
 
-- `POST /api/materials/upload` - 資料アップロード
-- `GET /api/materials/{book_id}` - 資料一覧取得
-- `DELETE /api/materials/{book_id}/{material_id}` - 資料削除
+```
+Pythonバックエンド (このリポジトリ)
+  ├── Gemini API (LLM)
+  └── Go Backend API (データ取得)
+       └── MySQL (エピソードデータ)
+```
+
+GoバックエンドAPIから`/books/{id}/episodes`エンドポイントを使ってエピソードデータを取得し、LLMに渡します。
+
 - `POST /api/materials/{book_id}/bulk-upload` - 一括アップロード
 
 ### ヘルスチェック
@@ -115,35 +154,38 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 // 既存のMockProviderをAPIProviderに置き換え
 export class APIProvider implements ChatProvider {
   private baseURL: string;
-  
-  constructor(baseURL: string = 'http://localhost:8000/api') {
+
+  constructor(baseURL: string = "http://localhost:8000/api") {
     this.baseURL = baseURL;
   }
-  
-  async send(messages: ChatMessage[], opts: { sources?: string[], chatType?: string } = {}): Promise<ChatMessage> {
-    const { sources = [], chatType = 'project' } = opts;
-    
+
+  async send(
+    messages: ChatMessage[],
+    opts: { sources?: string[]; chatType?: string } = {},
+  ): Promise<ChatMessage> {
+    const { sources = [], chatType = "project" } = opts;
+
     const endpoint = {
-      'project': '/chat/project',
-      'dictionary': '/chat/dictionary', 
-      'material': '/chat/material'
-    }[chatType] || '/chat/project';
-    
+      "project": "/chat/project",
+      "dictionary": "/chat/dictionary",
+      "material": "/chat/material",
+    }[chatType] || "/chat/project";
+
     const response = await fetch(`${this.baseURL}${endpoint}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         messages,
-        sources
-      })
+        sources,
+      }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`API Error: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return data.message;
   }
@@ -151,10 +193,10 @@ export class APIProvider implements ChatProvider {
 
 // プロバイダーファクトリーを更新
 export function createChatProvider(): ChatProvider {
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     return new APIProvider(); // 本番環境でも使用
   } else {
-    return new APIProvider('https://your-backend-api.com/api');
+    return new APIProvider("https://your-backend-api.com/api");
   }
 }
 ```
@@ -184,8 +226,10 @@ backend/
 ## 開発メモ
 
 - **認証**: 現在は実装していません。必要に応じて JWT 認証などを追加してください
-- **データベース**: 現在はインメモリストレージを使用。本番環境では PostgreSQL や MongoDB などの使用を推奨
-- **ファイルストレージ**: ローカルファイルシステムを使用。本番環境では AWS S3 などのクラウドストレージを推奨
+- **データベース**: 現在はインメモリストレージを使用。本番環境では PostgreSQL や
+  MongoDB などの使用を推奨
+- **ファイルストレージ**: ローカルファイルシステムを使用。本番環境では AWS S3
+  などのクラウドストレージを推奨
 - **ログ**: 基本的なログを実装。本番環境では構造化ログの使用を推奨
 
 ## トラブルシューティング
@@ -202,4 +246,5 @@ backend/
 
 ### ポートエラー
 
-他のアプリケーションがポート 8000 を使用している場合、`.env` ファイルで別のポートを指定してください。
+他のアプリケーションがポート 8000 を使用している場合、`.env`
+ファイルで別のポートを指定してください。
