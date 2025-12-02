@@ -3,7 +3,7 @@ from typing import List, Optional
 import os
 import logging
 from models.schemas import ChatMessage, ChatRequest
-from services.file_service import get_file_service
+from services.go_api_client import get_go_api_client, format_episodes_for_context, format_materials_for_context
 
 # ログ設定
 logger = logging.getLogger(__name__)
@@ -17,14 +17,14 @@ class GeminiChatService:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-2.5-flash')
 
-        # ファイルサービスを取得
-        self.file_service = get_file_service()
+        # GoAPIクライアントを取得
+        self.go_api_client = get_go_api_client()
 
         # 作家向けシステムプロンプト
         self.system_prompts = {
             "project": """
 あなたは作家の執筆をサポートするAIアシスタントです。
-提供されたプロジェクトファイルの内容を参考にして、執筆に役立つ回答をしてください。
+提供されたプロジェクト（執筆中のエピソード）の内容を参考にして、執筆に役立つ回答をしてください。
 - ストーリーの一貫性を保つためのアドバイス
 - キャラクター設定の確認
 - プロットの展開に関する提案
@@ -43,7 +43,7 @@ class GeminiChatService:
 """,
             "material": """
 あなたは資料研究をサポートするAIアシスタントです。
-提供された資料の内容を分析し、執筆に役立つ情報を提供してください。
+提供された参考資料の内容を分析し、執筆に役立つ情報を提供してください。
 - 重要なポイントの抽出
 - 関連情報の補足
 - 創作への応用方法
@@ -70,86 +70,73 @@ class GeminiChatService:
             if system_prompt:
                 conversation_history.append(f"システム: {system_prompt}")
 
-            # ファイル内容を読み取ってコンテキストに追加
-            file_context = ""
-            files_not_found = []
+            # GoAPIからデータを取得してコンテキストに追加
+            content_context = ""
+            content_not_found = []
             
             if chat_type == "project" and request.sources:
-                # プロジェクトファイルを読み取る
+                # プロジェクト(episodes)を取得
                 for source in request.sources:
-                    # sourceが "project:project_name:file1,file2" の形式であることを想定
-                    if source.startswith("project:"):
-                        parts = source.split(":", 2)
-                        if len(parts) >= 2:
-                            project_name = parts[1]
-                            selected_files = parts[2].split(",") if len(
-                                parts) > 2 and parts[2] else None
-
-                            logger.info(f"Attempting to read project files for: {project_name}")
-                            logger.info(f"Selected files: {selected_files}")
-
-                            # ファイル内容を読み取り
-                            files_content = self.file_service.read_project_files_content(
-                                project_name, selected_files
-                            )
-                            if files_content:
-                                file_context += self.file_service.format_files_for_context(
-                                    files_content)
-                                logger.info(
-                                    f"Project files loaded: {list(files_content.keys())}")
-                            else:
-                                logger.warning(f"No files found for project: {project_name}")
-                                if selected_files:
-                                    files_not_found.extend(selected_files)
-
-            elif chat_type == "material" and request.material_ids:
-                # 資料ファイルを読み取る
-                for source in request.sources:
-                    # sourceが "material:book_id:file1,file2" の形式であることを想定
-                    if source.startswith("material:"):
-                        parts = source.split(":", 2)
+                    # sourceの形式: "book:book_id"
+                    if source.startswith("book:"):
+                        parts = source.split(":")
                         if len(parts) >= 2:
                             book_id = parts[1]
-                            selected_files = parts[2].split(",") if len(
-                                parts) > 2 and parts[2] else None
+                            
+                            logger.info(f"📖 [プロジェクト] Fetching episodes for book: {book_id}")
+                            try:
+                                episodes = await self.go_api_client.get_episodes(book_id)
+                                
+                                if episodes:
+                                    content_context += format_episodes_for_context(episodes)
+                                    logger.info(f"✅ [プロジェクト] {len(episodes)} episodes loaded for book {book_id}")
+                                else:
+                                    logger.warning(f"⚠️ [プロジェクト] No episodes found for book: {book_id}")
+                                    content_not_found.append(f"book:{book_id}")
+                            except Exception as e:
+                                logger.error(f"❌ [プロジェクト] Error fetching episodes: {e}")
+                                content_not_found.append(f"book:{book_id}")
+            
+            elif chat_type == "material" and request.sources:
+                # 参考資料(materials)を取得
+                for source in request.sources:
+                    # sourceの形式: "book:book_id"
+                    if source.startswith("book:"):
+                        parts = source.split(":")
+                        if len(parts) >= 2:
+                            book_id = parts[1]
+                            
+                            logger.info(f"📚 [資料] Fetching materials for book: {book_id}")
+                            try:
+                                materials = await self.go_api_client.get_materials(book_id)
+                                
+                                if materials:
+                                    content_context += format_materials_for_context(materials)
+                                    logger.info(f"✅ [資料] {len(materials)} materials loaded for book {book_id}")
+                                else:
+                                    logger.warning(f"⚠️ [資料] No materials found for book: {book_id}")
+                                    content_not_found.append(f"book:{book_id}")
+                            except Exception as e:
+                                logger.error(f"❌ [資料] Error fetching materials: {e}")
+                                content_not_found.append(f"book:{book_id}")
 
-                            logger.info(f"Attempting to read material files for: {book_id}")
-                            logger.info(f"Selected files: {selected_files}")
-
-                            # ファイル内容を読み取り
-                            files_content = self.file_service.read_material_files_content(
-                                book_id, selected_files
-                            )
-                            if files_content:
-                                file_context += self.file_service.format_files_for_context(
-                                    files_content)
-                                logger.info(
-                                    f"Material files loaded: {list(files_content.keys())}")
-                            else:
-                                logger.warning(f"No files found for material: {book_id}")
-                                if selected_files:
-                                    files_not_found.extend(selected_files)
-                                file_context += self.file_service.format_files_for_context(
-                                    files_content)
-                                logger.info(
-                                    f"Material files loaded: {list(files_content.keys())}")
-
-            # ファイルコンテキストを追加
-            if file_context:
-                conversation_history.append(file_context)
-            elif files_not_found:
-                # ファイルが見つからない場合の対応
-                logger.warning(f"Files not found: {files_not_found}")
+            # コンテキストを追加
+            if content_context:
+                conversation_history.append(content_context)
+            elif content_not_found:
+                # データが見つからない場合の対応
+                data_type_ja = "プロジェクト" if chat_type == "project" else "参考資料"
+                logger.error(f"❌ {data_type_ja}が見つかりません: {content_not_found}")
                 import time
                 return ChatMessage(
                     id=f"error-{int(time.time())}",
                     role="assistant", 
-                    content=f"申し訳ございません。指定されたファイル（{', '.join(files_not_found)}）が見つかりません。\n\nファイルが正しく保存されているか確認してください。または、別のファイルを選択してお試しください。",
+                    content=f"申し訳ございません。指定された{data_type_ja}（{', '.join(content_not_found)}）が見つかりません。\n\n{data_type_ja}が正しく登録されているか確認してください。",
                     ts=int(time.time() * 1000)
                 )
 
             # ソース情報を追加（レガシー対応）
-            if request.sources and not file_context and not files_not_found:
+            if request.sources and not content_context and not content_not_found:
                 source_info = f"参照するソース: {', '.join(request.sources)}"
                 conversation_history.append(source_info)
 
@@ -229,10 +216,11 @@ class GeminiChatService:
             # 空のレスポンスの場合のフォールバック
             if not response_text.strip():
                 logger.warning("Empty response text received")
-                if file_context:
-                    response_text = "申し訳ございません。ファイル内容を参照しましたが、適切な応答を生成できませんでした。質問を具体的にしていただくか、別の表現でお試しください。"
+                data_type_ja = "プロジェクト" if chat_type == "project" else "参考資料" if chat_type == "material" else "データ"
+                if content_context:
+                    response_text = f"申し訳ございません。{data_type_ja}の内容を参照しましたが、適切な応答を生成できませんでした。質問を具体的にしていただくか、別の表現でお試しください。"
                 else:
-                    response_text = "申し訳ございません。参照するファイルが見つからないか、内容が不十分で適切な応答を生成できませんでした。ファイルを確認してから再度お試しください。"
+                    response_text = f"申し訳ございません。参照する{data_type_ja}が見つからないか、内容が不十分で適切な応答を生成できませんでした。{data_type_ja}を確認してから再度お試しください。"
 
             # レスポンスメッセージを作成
             import time
