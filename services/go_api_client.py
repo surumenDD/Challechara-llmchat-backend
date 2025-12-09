@@ -64,49 +64,6 @@ class GoAPIClient:
             logger.error(f"Error fetching episode from Go API: {e}")
             raise
     
-    # ========== Material API ==========
-    
-    async def get_materials(self, book_id: str) -> List[Dict]:
-        """特定のbookの参考資料一覧を取得"""
-        url = f"{self.base_url}/api/books/{book_id}/materials"
-        
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                materials = response.json()
-                logger.info(f"✅ Fetched {len(materials)} materials for book {book_id}")
-                return materials
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"Book {book_id} not found for materials")
-                return []
-            logger.error(f"HTTP error fetching materials: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching materials from Go API: {e}")
-            raise
-    
-    async def get_material(self, material_id: int) -> Optional[Dict]:
-        """特定の参考資料を取得"""
-        url = f"{self.base_url}/api/materials/{material_id}"
-        
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                material = response.json()
-                logger.info(f"✅ Fetched material {material_id}")
-                return material
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"Material {material_id} not found")
-                return None
-            logger.error(f"HTTP error fetching material: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching material from Go API: {e}")
-            raise
 
 def _clean_html_content(content: str) -> str:
     """HTMLタグを除去してプレーンテキストに変換"""
