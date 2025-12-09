@@ -5,18 +5,17 @@ from datetime import datetime
 
 class ChatMessage(BaseModel):
     """チャットメッセージのモデル"""
-    id: str
+    id: Optional[str] = None
     role: Literal["user", "assistant"]
     content: str
-    ts: int
+    ts: Optional[int] = None
 
 
 class ChatRequest(BaseModel):
     """チャットリクエストのモデル"""
     messages: List[ChatMessage]
-    sources: Optional[List[str]] = []
+    sources: Optional[List[str]] = []  # "project:book_id:ep1,ep2" or "material:book_id:mat1,mat2"
     context: Optional[str] = None
-    material_ids: Optional[List[int]] = []
 
 
 class ChatResponse(BaseModel):
