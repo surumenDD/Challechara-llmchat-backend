@@ -22,6 +22,55 @@ class GoAPIClient:
     
     # ========== Episode API ==========
     
+    async def get_episodes_by_ids(self, episode_ids: List[str]) -> List[Dict]:
+        """複数のエピソードIDから一括取得（POST /api/episodes/batch）"""
+        if not episode_ids:
+            logger.warning("⚠️ No episode IDs provided")
+            return []
+        
+        url = f"{self.base_url}/api/episodes/batch"
+        payload = {"ids": episode_ids}
+        
+        try:
+            logger.info(f"📖 Fetching {len(episode_ids)} episodes")
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                episodes = response.json()
+                return episodes
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ HTTP error: {e.response.status_code}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Error: {e}")
+            return []
+    
+    # ========== Material API ==========
+    
+    async def get_materials_by_ids(self, material_ids: List[str]) -> List[Dict]:
+        """複数の資料IDから一括取得（POST /api/materials/batch）"""
+        if not material_ids:
+            logger.warning("⚠️ No material IDs provided")
+            return []
+        
+        url = f"{self.base_url}/api/materials/batch"
+        payload = {"ids": material_ids}
+        
+        try:
+            logger.info(f"📚 Fetching {len(material_ids)} materials")
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                materials = response.json()
+                return materials
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ HTTP error: {e.response.status_code}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Error: {e}")
+            return []
+
+
 def _clean_html_content(content: str) -> str:
     """HTMLタグを除去してプレーンテキストに変換"""
     if not content:
