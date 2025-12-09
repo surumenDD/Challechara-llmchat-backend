@@ -4,6 +4,8 @@ GoのAPIからデータを取得してLLMに渡すサービス
 import os
 import logging
 import httpx
+import html
+import re
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,30 @@ class GoAPIClient:
         except Exception as e:
             logger.error(f"Error fetching material from Go API: {e}")
             raise
+
+def _clean_html_content(content: str) -> str:
+    """HTMLタグを除去してプレーンテキストに変換"""
+    if not content:
+        return ""
+    
+    # HTMLエスケープを解除
+    content = html.unescape(content)
+    
+    # <br> を改行に変換
+    content = re.sub(r'<br\s*/?>', '\n', content, flags=re.IGNORECASE)
+    
+    # <p>タグを改行に変換
+    content = re.sub(r'</p>', '\n\n', content, flags=re.IGNORECASE)
+    content = re.sub(r'<p[^>]*>', '', content, flags=re.IGNORECASE)
+    
+    # 残りのHTMLタグを全削除
+    content = re.sub(r'<[^>]+>', '', content)
+    
+    # 連続する空白・改行を整理
+    content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
+    content = re.sub(r'[ \t]+', ' ', content)
+    
+    return content.strip()
 
 
 def format_episodes_for_context(episodes: List[Dict], max_length: int = 5000) -> str:
