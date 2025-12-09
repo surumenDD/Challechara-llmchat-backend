@@ -22,49 +22,6 @@ class GoAPIClient:
     
     # ========== Episode API ==========
     
-    async def get_episodes(self, book_id: str) -> List[Dict]:
-        """特定のbookのエピソード一覧を取得"""
-        url = f"{self.base_url}/api/books/{book_id}/episodes"
-        
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                episodes = response.json()
-                logger.info(f"✅ Fetched {len(episodes)} episodes for book {book_id}")
-                return episodes
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"Book {book_id} not found")
-                return []
-            logger.error(f"HTTP error fetching episodes: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching episodes from Go API: {e}")
-            raise
-    
-    async def get_episode(self, episode_id: int) -> Optional[Dict]:
-        """特定のエピソードを取得"""
-        url = f"{self.base_url}/api/episodes/{episode_id}"
-        
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                episode = response.json()
-                logger.info(f"✅ Fetched episode {episode_id}")
-                return episode
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"Episode {episode_id} not found")
-                return None
-            logger.error(f"HTTP error fetching episode: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching episode from Go API: {e}")
-            raise
-    
-
 def _clean_html_content(content: str) -> str:
     """HTMLタグを除去してプレーンテキストに変換"""
     if not content:
