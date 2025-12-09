@@ -110,17 +110,9 @@ async def material_chat(
 ):
     """資料を参照したチャット"""
     try:
-        logger.info(f"Request: {request}")
-        material_ids = getattr(request, "material_ids", [])
-        materials = []
-        if material_ids:
-            materials = await fetch_materials_by_ids(material_ids)
-            logger.info(f"Fetched {len(materials)} materials from Go API")
-
-        # 取得した資料をまとめてテキストとして渡す
-        sources_text = "\n\n".join([f"Title: {m['title']}\nContent: {m['content']}" for m in materials])
-        request.sources = [sources_text] if sources_text else []
-
+        logger.info(f"Material chat request with {len(request.messages)} messages")
+        logger.info(f"Sources: {request.sources}")
+        
         response_message = await gemini_service.generate_response(
             request, 
             chat_type="material"
