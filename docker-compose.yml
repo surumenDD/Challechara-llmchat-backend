@@ -30,4 +30,4 @@ services:
 
 networks:
   challechara-network:
-    driver: bridge
+    external: true # 外部ネットワークを使用
