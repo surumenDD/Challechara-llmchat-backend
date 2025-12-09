@@ -22,21 +22,24 @@ class GoAPIClient:
     
     # ========== Episode API ==========
     
-    async def get_episodes_by_ids(self, episode_ids: List[str]) -> List[Dict]:
-        """複数のエピソードIDから一括取得（POST /api/episodes/batch）"""
+    async def get_episodes_by_ids(self, book_id: str, episode_ids: List[str]) -> List[Dict]:
+        """複数のエピソードIDから一括取得（POST /api/books/{book_id}/episodes/batch）"""
         if not episode_ids:
             logger.warning("⚠️ No episode IDs provided")
             return []
         
-        url = f"{self.base_url}/api/episodes/batch"
+        url = f"{self.base_url}/api/books/{book_id}/episodes/batch"
         payload = {"ids": episode_ids}
         
         try:
-            logger.info(f"📖 Fetching {len(episode_ids)} episodes")
+            logger.info(f"📖 [Go API] POST {url}")
+            logger.info(f"📖 [Go API] Request body: {payload}")
+            logger.info(f"📖 Fetching {len(episode_ids)} episodes for book {book_id}")
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 episodes = response.json()
+                logger.info(f"✅ [Go API] Received {len(episodes)} episodes")
                 return episodes
         except httpx.HTTPStatusError as e:
             logger.error(f"❌ HTTP error: {e.response.status_code}")
@@ -47,21 +50,24 @@ class GoAPIClient:
     
     # ========== Material API ==========
     
-    async def get_materials_by_ids(self, material_ids: List[str]) -> List[Dict]:
-        """複数の資料IDから一括取得（POST /api/materials/batch）"""
+    async def get_materials_by_ids(self, book_id: str, material_ids: List[str]) -> List[Dict]:
+        """複数の資料IDから一括取得（POST /api/books/{book_id}/materials/batch）"""
         if not material_ids:
             logger.warning("⚠️ No material IDs provided")
             return []
         
-        url = f"{self.base_url}/api/materials/batch"
+        url = f"{self.base_url}/api/books/{book_id}/materials/batch"
         payload = {"ids": material_ids}
         
         try:
-            logger.info(f"📚 Fetching {len(material_ids)} materials")
+            logger.info(f"📚 [Go API] POST {url}")
+            logger.info(f"📚 [Go API] Request body: {payload}")
+            logger.info(f"📚 Fetching {len(material_ids)} materials for book {book_id}")
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 materials = response.json()
+                logger.info(f"✅ [Go API] Received {len(materials)} materials")
                 return materials
         except httpx.HTTPStatusError as e:
             logger.error(f"❌ HTTP error: {e.response.status_code}")
@@ -108,6 +114,9 @@ def format_episodes_for_context(episodes: List[Dict], max_length: int = 5000) ->
         title = episode.get('title', '無題')
         content = episode.get('content', '')
         
+        # HTMLタグを除去
+        content = _clean_html_content(content)
+        
         formatted.append(f"\n--- Episode {episode_no}: {title} ---")
         
         if len(content) > max_length:
@@ -132,6 +141,9 @@ def format_materials_for_context(materials: List[Dict], max_length: int = 5000) 
         title = material.get('title', '無題')
         content = material.get('content', '')
         created_at = material.get('created_at', '')
+        
+        # HTMLタグを除去
+        content = _clean_html_content(content)
         
         formatted.append(f"\n--- 資料: {title} ({created_at}) ---")
         
