@@ -77,48 +77,65 @@ class GeminiChatService:
             if chat_type == "project" and request.sources:
                 # プロジェクト(episodes)を取得
                 for source in request.sources:
-                    # sourceの形式: "book:book_id"
-                    if source.startswith("book:"):
+                    # sourceの形式: "project:book_id:episode_id1,episode_id2,..." または "book:book_id"
+                    if source.startswith("project:") or source.startswith("book:"):
                         parts = source.split(":")
-                        if len(parts) >= 2:
+                        if len(parts) >= 3:
+                            # project:book_id:episode_ids の形式
                             book_id = parts[1]
+                            episode_ids = parts[2].split(",") if parts[2] else []
                             
-                            logger.info(f"📖 [プロジェクト] Fetching episodes for book: {book_id}")
+                            logger.info(f"📖 [プロジェクト] Fetching {len(episode_ids)} episodes for book: {book_id}")
                             try:
-                                episodes = await self.go_api_client.get_episodes(book_id)
+                                episodes = await self.go_api_client.get_episodes_by_ids(book_id, episode_ids)
                                 
                                 if episodes:
                                     content_context += format_episodes_for_context(episodes)
-                                    logger.info(f"✅ [プロジェクト] {len(episodes)} episodes loaded for book {book_id}")
+                                    logger.info(f"✅ [プロジェクト] {len(episodes)} episodes loaded")
                                 else:
-                                    logger.warning(f"⚠️ [プロジェクト] No episodes found for book: {book_id}")
-                                    content_not_found.append(f"book:{book_id}")
+                                    logger.warning(f"⚠️ [プロジェクト] No episodes found for IDs: {episode_ids}")
+                                    content_not_found.append(f"project:{book_id}")
                             except Exception as e:
                                 logger.error(f"❌ [プロジェクト] Error fetching episodes: {e}")
-                                content_not_found.append(f"book:{book_id}")
+                                content_not_found.append(f"project:{book_id}")
+                        elif len(parts) >= 2:
+                            # book:book_id の形式（後方互換）
+                            book_id = parts[1]
+                            logger.warning(f"⚠️ [プロジェクト] Legacy format 'book:{book_id}' - no episode IDs provided")
+                            content_not_found.append(f"book:{book_id}")
             
             elif chat_type == "material" and request.sources:
                 # 参考資料(materials)を取得
+                logger.info(f"🔍 [資料] Processing sources: {request.sources}")
                 for source in request.sources:
-                    # sourceの形式: "book:book_id"
-                    if source.startswith("book:"):
+                    logger.info(f"🔍 [資料] Processing source: {source}")
+                    # sourceの形式: "material:book_id:material_id1,material_id2,..." または "book:book_id"
+                    if source.startswith("material:") or source.startswith("book:"):
                         parts = source.split(":")
-                        if len(parts) >= 2:
+                        logger.info(f"🔍 [資料] Split parts: {parts}, length: {len(parts)}")
+                        if len(parts) >= 3:
+                            # material:book_id:material_ids の形式
                             book_id = parts[1]
+                            material_ids = parts[2].split(",") if parts[2] else []
                             
-                            logger.info(f"📚 [資料] Fetching materials for book: {book_id}")
+                            logger.info(f"📚 [資料] Fetching {len(material_ids)} materials for book: {book_id}")
                             try:
-                                materials = await self.go_api_client.get_materials(book_id)
+                                materials = await self.go_api_client.get_materials_by_ids(book_id, material_ids)
                                 
                                 if materials:
                                     content_context += format_materials_for_context(materials)
-                                    logger.info(f"✅ [資料] {len(materials)} materials loaded for book {book_id}")
+                                    logger.info(f"✅ [資料] {len(materials)} materials loaded")
                                 else:
-                                    logger.warning(f"⚠️ [資料] No materials found for book: {book_id}")
-                                    content_not_found.append(f"book:{book_id}")
+                                    logger.warning(f"⚠️ [資料] No materials found for IDs: {material_ids}")
+                                    content_not_found.append(f"material:{book_id}")
                             except Exception as e:
                                 logger.error(f"❌ [資料] Error fetching materials: {e}")
-                                content_not_found.append(f"book:{book_id}")
+                                content_not_found.append(f"material:{book_id}")
+                        elif len(parts) >= 2:
+                            # book:book_id の形式（後方互換）
+                            book_id = parts[1]
+                            logger.warning(f"⚠️ [資料] Legacy format 'book:{book_id}' - no material IDs provided")
+                            content_not_found.append(f"book:{book_id}")
 
             # コンテキストを追加
             if content_context:
