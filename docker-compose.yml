@@ -8,6 +8,8 @@ services:
       - "8000:8000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GPT_OSS_URL=${GPT_OSS_URL}
+      - GPT_OSS_PASSWORD=${GPT_OSS_PASSWORD}
       - GO_API_URL=${GO_API_URL:-http://host.docker.internal:8080}
       - DEBUG=${DEBUG:-false}
       - PORT=8000

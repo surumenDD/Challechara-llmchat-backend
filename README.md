@@ -4,7 +4,7 @@
 
 ## 概要
 
-このバックエンドは、Gemini APIを使用したチャット機能を提供する FastAPI
+このバックエンドは、Gemini APIとGPT OSSを使用したチャット機能を提供する FastAPI
 アプリケーションです。
 
 ## 機能
@@ -58,17 +58,26 @@ cp .env.example .env
 
 ```env
 GEMINI_API_KEY=your_actual_gemini_api_key_here
+GPT_OSS_URL=https://aisvr221.aikb.kyutech.ac.jp/api/generate  # GPT OSSのAPIエンドポイント
+GPT_OSS_PASSWORD=your_gpt_oss_password_here  # GPT OSSのパスワード
 DEBUG=True
 PORT=8000
 FRONTEND_URL=http://localhost:3000
 GO_API_URL=http://localhost:8080  # GoバックエンドのURL
 ```
 
-### 3. Gemini API キーの取得
+### 3. API キーの取得
+
+#### Gemini API キー
 
 1. [Google AI Studio](https://makersuite.google.com/app/apikey) にアクセス
 2. APIキーを生成
 3. `.env` ファイルの `GEMINI_API_KEY` に設定
+
+#### GPT OSS パスワード
+
+1. GPT OSSのパスワードを取得（管理者から提供）
+2. `.env` ファイルの `GPT_OSS_PASSWORD` に設定
 
 ### 4. サーバーの起動
 
@@ -131,11 +140,12 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 Pythonバックエンド (このリポジトリ)
   ├── Gemini API (LLM)
+  ├── GPT OSS API (LLM)
   └── Go Backend API (データ取得)
        └── MySQL (エピソードデータ)
 ```
 
-GoバックエンドAPIから`/books/{id}/episodes`エンドポイントを使ってエピソードデータを取得し、LLMに渡します。
+GoバックエンドAPIから`/books/{id}/episodes`エンドポイントを使ってエピソードデータを取得し、LLM（Gemini または GPT OSS）に渡します。
 
 - `POST /api/materials/{book_id}/bulk-upload` - 一括アップロード
 
