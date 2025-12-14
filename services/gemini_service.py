@@ -205,7 +205,7 @@ class GeminiChatService:
             # Gemini API設定とタイムアウト対策
             generation_config = genai.types.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=2000,  # 出力トークン数を増やす
+                max_output_tokens=10000,
             )
 
             response = self.model.generate_content(
