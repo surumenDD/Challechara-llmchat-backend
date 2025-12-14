@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: challechara-llmchat-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GO_API_URL=${GO_API_URL:-http://host.docker.internal:8080}
+      - DEBUG=${DEBUG:-false}
+      - PORT=8000
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      # MySQL接続設定（将来の直接DB接続用）
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-challecara}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-challecara}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    extra_hosts:
+      # ホストマシンのGoサービスにアクセスできるようにする
+      - "host.docker.internal:host-gateway"
+    networks:
+      - challechara-network
+
+networks:
+  challechara-network:
+    external: true # 外部ネットワークを使用

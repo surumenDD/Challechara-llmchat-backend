@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 import logging
+import httpx
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
 
 from models.schemas import (
     ChatRequest, 
@@ -75,6 +80,28 @@ async def dictionary_chat(
                 "details": str(e)
             }
         )
+
+GO_MATERIAL_API_URL = "http://localhost:8080/api/materials/batch"
+
+async def fetch_materials_by_ids(ids: list[int]):
+    """Go APIから複数マテリアルをID指定で取得"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                GO_MATERIAL_API_URL,
+                json={"ids": ids},
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            materials = response.json()
+            return materials
+        except httpx.RequestError as e:
+            logger.error(f"Request error while fetching materials: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch materials from Go API")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error while fetching materials: {e}")
+            raise HTTPException(status_code=e.response.status_code, detail="Go API returned error")
+
 
 @router.post("/chat/material", response_model=ChatResponse)
 async def material_chat(

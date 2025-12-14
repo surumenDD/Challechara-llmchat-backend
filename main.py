@@ -7,7 +7,7 @@ import os
 import logging
 import time
 
-from routers import chat, dictionary, materials, projects
+from routers import chat, dictionary
 
 # 環境変数を読み込み
 load_dotenv()
@@ -60,9 +60,6 @@ app.add_middleware(
 # ルーターを登録
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(dictionary.router, prefix="/api", tags=["dictionary"])
-app.include_router(materials.router, prefix="/api", tags=["materials"])
-app.include_router(projects.router, prefix="/api", tags=["projects"])
-
 
 @app.get("/")
 async def root():
